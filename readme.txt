@@ -21,6 +21,5 @@
 - Run cmd
 	python groupBOTDialog.py
 
-
 Telegram bot
 @NeiroBUYAlam_bot
