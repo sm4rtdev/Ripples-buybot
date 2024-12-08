@@ -123,7 +123,7 @@ async def send_notification(value, xrp_spent, token_config, tx):
         return
 
     price = xrp_spent / value if value else 0
-    emoji_count = min(int(xrp_spent / 50), 50)
+    emoji_count = min(int(xrp_spent / 10), 50)
     emojis = token_config['EMOJI_ICON'] * emoji_count
 
     # Convert currency code from hex to string if needed

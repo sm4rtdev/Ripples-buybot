@@ -15,7 +15,7 @@ class TokenConfig:
             "CHAT_ID": None,
             "TOKEN_ISSUER": os.getenv('TOKEN_ISSUER', 'r93hE5FNShDdUqazHzNvwsCxL9mSqwyiru'),
             "TOKEN_CURRENCY": os.getenv('TOKEN_CURRENCY', '52504C5300000000000000000000000000000000'),
-            "THRESHOLD": os.getenv('THRESHOLD', '50'),
+            "THRESHOLD": os.getenv('THRESHOLD', '0'),
             "EMOJI_ICON": os.getenv('EMOJI', '🚀'),
             "MEDIA": os.getenv('MEDIA_URL', 'https://example.com/buy.gif'),
             "TYPE": True  # True for GIF, False for image
