@@ -135,7 +135,7 @@ async def send_notification(value, xrp_spent, token_config, tx):
         pass  # Keep original if conversion fails
 
     message = (
-        f"<b>🔥 NEW BUY</b>\n\n"
+        f"<b>🚀 NEW $RPLS Buy!</b>\n\n"
         f"{emojis}\n\n"
         f"💰 <b>Spent:</b> {xrp_spent:.2f} XRP\n"
         f"🎯 <b>Bought:</b> {value:.2f} {currency_code}\n"
