@@ -5,6 +5,8 @@ import logging
 import asyncio
 import certifi
 import websockets
+import requests
+import time
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -12,8 +14,10 @@ from db import TokenConfig
 from datetime import datetime
 from telegram.constants import ChatMemberStatus
 from telegram.error import Conflict
+from xrpl.clients import JsonRpcClient
+from xrpl.models.requests import AccountLines
 
-
+client = JsonRpcClient("https://s.altnet.rippletest.net:51234")  # Use the appropriate URL for your network
 load_dotenv()
 
 # Logging setup
@@ -83,7 +87,7 @@ async def handle_transaction(response):
     tx = transaction["transaction"]
     meta = transaction["meta"]
     
-    if tx.get("TransactionType") not in ["Payment", "OfferCreate"]:
+    if tx.get("TransactionType") not in ["Payment"]:
         return
 
     try:
@@ -158,6 +162,7 @@ async def send_notification(value, xrp_spent, group_settings, tx, chat_id):
     price = xrp_spent / value if value else 0
     emoji_count = min(int(xrp_spent / 10), 50)
     emojis = group_settings['EMOJI_ICON'] * emoji_count
+    market_cap = calculate_market_cap()
 
     # Convert currency code from hex to string if needed
     currency_code = config.get_config()['TOKEN_CURRENCY']
@@ -169,20 +174,20 @@ async def send_notification(value, xrp_spent, group_settings, tx, chat_id):
 
     # New message format
     message = (
-        f"🚀 New ${currency_code} Buy!\n\n"
+        f"🚀 <b>New ${currency_code} Buy!</b>\n\n"
         f"{emojis}\n\n"
-        f"💸 Spent: {xrp_spent:.2f} XRP\n"
-        f"💳 Bought: {value:,.3f} (${currency_code})\n"
-        # f"🧢 MC: ${0:,.3f} USD\n"  # You'll need to implement market cap calculation
-        f"💰 CA: {config.get_config()['TOKEN_ISSUER']}\n"
-        f"👛 Wallet: {tx['Account']}\n\n"
+        f"💸 <b>Spent:</b> {xrp_spent:.2f} XRP\n"
+        f"💳 <b>Bought:</b> {value:,.3f} (${currency_code})\n"
+        f"🧢 <b>MC:</b> ${market_cap:,.3f} USD\n"  # You'll need to implement market cap calculation
+        f"💰 <b>CA:</b> {config.get_config()['TOKEN_ISSUER']}\n"
+        f"👛 <b>Wallet:</b> {tx['Account']}\n\n"
         # f"📢 Paid Ad:\n"
         # f"👁 $3RDEYE Sees Beyond All Chains\n"
         # f"🔮 Awaken your 3rd Eye, unlock the truth\n"
         # f"👁 $3RDEYE aligns your mind, body, and soul\n"
         # f"🔴 X Marks the Vision\n"
         # f"TG | X | FL\n\n"
-        f"🤖 in: {len(config.get_config()['CHAT_IDS'])} TG group(s)"
+        f"🤖 <b>in:</b> {len(config.get_config()['CHAT_IDS'])} TG group(s)"
     )
 
     keyboard = [
@@ -408,6 +413,76 @@ async def set_emoji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"✅ Buy notification emoji updated to {emoji} for this group.")
 
+def get_circulating_supply(coin_id):
+    """
+    Fetch the circulating supply of a cryptocurrency from CoinGecko API.
+    :param coin_id: The CoinGecko ID of the cryptocurrency (e.g., "ripple" for XRP).
+    :return: Circulating supply as a float, or None if not found.
+    """
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+    max_retries = 5  # Maximum number of retries
+    retry_delay = 10  # Delay in seconds between retries
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url)
+            
+            # Handle rate limit (429 Too Many Requests)
+            if response.status_code == 429:
+                print(f"Rate limit exceeded. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                continue  # Retry the request
+            
+            # Raise an error for other bad status codes
+            response.raise_for_status()
+            
+            # Parse the response
+            data = response.json()
+            circulating_supply = data["market_data"]["circulating_supply"]
+            return circulating_supply
+        
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching circulating supply (attempt {attempt + 1}): {e}")
+            if attempt < max_retries - 1:  # If retries are left
+                print(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                print("Max retries reached. Exiting.")
+                return None
+    
+def get_token_price(token_symbol):
+    """
+    Fetch the current token price in USD from CoinGecko.
+    """
+    try:
+        response = requests.get(
+            f"https://api.coingecko.com/api/v3/simple/price?ids={token_symbol}&vs_currencies=usd"
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Check if the token exists in the response
+        if token_symbol not in data:
+            raise ValueError(f"Token '{token_symbol}' not found in CoinGecko response.")
+        return data[token_symbol]["usd"]
+    except Exception as e:
+        logger.error(f"Error fetching token price: {e}")
+        return 0.0
+
+def calculate_market_cap():
+    """
+    Calculate the market cap of the token.
+    """
+    try:
+        # Ensure the coroutine is awaited
+        token_symbol = "ripples"
+        market_cap = get_circulating_supply(token_symbol) * get_token_price(token_symbol)
+        return market_cap
+    except Exception as e:
+        logger.error(f"Error calculating market cap: {e}", exc_info=True)
+        return 0
+
+
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show current status and settings for the group."""
     chat_id = update.effective_chat.id
@@ -421,6 +496,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Convert currency code from hex to string if needed
     currency_code = token_config['TOKEN_CURRENCY']
+    market_cap = calculate_market_cap()
     try:
         if len(currency_code) == 40:  # Hex format
             currency_code = bytes.fromhex(currency_code).decode('utf-8').strip('\x00')
@@ -432,6 +508,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🎯 <b>Token:</b> {currency_code}\n"
         f"📝 <b>Issuer:</b> {token_config['TOKEN_ISSUER']}\n"
         f"💰 <b>Threshold:</b> {group_settings['THRESHOLD']} XRP\n"
+        f"🧢 <b>MC:</b> ${market_cap:,.3f} USD\n"  # You'll need to implement market cap calculation
         f" <b>Emoji:</b> {group_settings['EMOJI_ICON']}\n"
         f"🖼️ <b>Media Type:</b> {'GIF' if group_settings['TYPE'] else 'Photo'}\n"
         f"🔗 <b>Media URL:</b> {group_settings['MEDIA']}\n"

@@ -1,8 +1,9 @@
 {
   "CHAT_IDS": [
     -4684743558,
-    -1002390736097,
-    -1002448110702
+    -1002350127058,
+    -1002448110702,
+    -1002390736097
   ],
   "TOKEN_ISSUER": "r93hE5FNShDdUqazHzNvwsCxL9mSqwyiru",
   "TOKEN_CURRENCY": "52504C5300000000000000000000000000000000",
@@ -13,13 +14,19 @@
       "MEDIA": "https://imgur.com/qZJOUTi.gif",
       "TYPE": true
     },
-    "-1002390736097": {
+    "-1002350127058": {
       "THRESHOLD": "0",
       "EMOJI_ICON": "🚀",
       "MEDIA": "https://imgur.com/qZJOUTi.gif",
       "TYPE": true
     },
     "-1002448110702": {
+      "THRESHOLD": "0",
+      "EMOJI_ICON": "🚀",
+      "MEDIA": "https://imgur.com/qZJOUTi.gif",
+      "TYPE": true
+    },
+    "-1002390736097": {
       "THRESHOLD": "0",
       "EMOJI_ICON": "🚀",
       "MEDIA": "https://imgur.com/qZJOUTi.gif",
