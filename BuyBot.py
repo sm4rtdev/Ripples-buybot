@@ -6,16 +6,12 @@ import asyncio
 import certifi
 import websockets
 import requests
-import time
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 from db import TokenConfig
-from datetime import datetime
-from telegram.constants import ChatMemberStatus
 from telegram.error import Conflict
 from xrpl.clients import JsonRpcClient
-from xrpl.models.requests import AccountLines
 
 client = JsonRpcClient("https://s.altnet.rippletest.net:51234")  # Use the appropriate URL for your network
 load_dotenv()
@@ -34,17 +30,6 @@ OWNER_ID = int(os.getenv('OWNER_ID'))
 
 config = TokenConfig()
 ws_task = None
-
-# async def get_rpls_price():
-#     """Get current $RPLS price in USD."""
-#     try:
-#         async with aiohttp.ClientSession() as session:
-#             async with session.get('https://api.coingecko.com/api/v3/simple/price?ids=$rpls&vs_currencies=usd') as response:
-#                 data = await response.json()
-#                 return data['ripple']['usd']
-#     except Exception as e:
-#         logger.error(f"Error fetching XRP price: {e}")
-#         return 0
 
 async def error_handler(update, context):
     if isinstance(context.error, Conflict):
@@ -87,7 +72,7 @@ async def handle_transaction(response):
     tx = transaction["transaction"]
     meta = transaction["meta"]
     
-    if tx.get("TransactionType") not in ["Payment"]:
+    if tx.get("TransactionType") not in ["Payment", "OfferCreate"]:
         return
 
     try:
@@ -151,7 +136,7 @@ async def handle_offer_create(tx, meta, token_config):
             # Send notifications to all configured groups
             for chat_id in token_config["CHAT_IDS"]:
                 group_settings = config.get_group_settings(chat_id)
-                if xrp_spent > float(group_settings['THRESHOLD']):
+                if xrp_spent >= float(group_settings['THRESHOLD']):
                     await send_notification(value, xrp_spent, group_settings, tx, chat_id)
                     
     except (ValueError, TypeError) as e:
@@ -412,62 +397,6 @@ async def set_emoji(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config.update_group_settings(chat_id, group_settings)
 
     await update.message.reply_text(f"✅ Buy notification emoji updated to {emoji} for this group.")
-
-# def get_circulating_supply(coin_id):
-#     """
-#     Fetch the circulating supply of a cryptocurrency from CoinGecko API.
-#     :param coin_id: The CoinGecko ID of the cryptocurrency (e.g., "ripple" for XRP).
-#     :return: Circulating supply as a float, or None if not found.
-#     """
-#     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-#     max_retries = 5  # Maximum number of retries
-#     retry_delay = 10  # Delay in seconds between retries
-
-#     for attempt in range(max_retries):
-#         try:
-#             response = requests.get(url)
-            
-#             # Handle rate limit (429 Too Many Requests)
-#             if response.status_code == 429:
-#                 print(f"Rate limit exceeded. Retrying in {retry_delay} seconds...")
-#                 time.sleep(retry_delay)
-#                 continue  # Retry the request
-            
-#             # Raise an error for other bad status codes
-#             response.raise_for_status()
-            
-#             # Parse the response
-#             data = response.json()
-#             circulating_supply = data["market_data"]["circulating_supply"]
-#             return circulating_supply
-        
-#         except requests.exceptions.RequestException as e:
-#             print(f"Error fetching circulating supply (attempt {attempt + 1}): {e}")
-#             if attempt < max_retries - 1:  # If retries are left
-#                 print(f"Retrying in {retry_delay} seconds...")
-#                 time.sleep(retry_delay)
-#             else:
-#                 print("Max retries reached. Exiting.")
-#                 return None
-    
-# def get_token_price(token_symbol):
-#     """
-#     Fetch the current token price in USD from CoinGecko.
-#     """
-#     try:
-#         response = requests.get(
-#             f"https://api.coingecko.com/api/v3/simple/price?ids={token_symbol}&vs_currencies=usd"
-#         )
-#         response.raise_for_status()
-#         data = response.json()
-
-#         # Check if the token exists in the response
-#         if token_symbol not in data:
-#             raise ValueError(f"Token '{token_symbol}' not found in CoinGecko response.")
-#         return data[token_symbol]["usd"]
-#     except Exception as e:
-#         logger.error(f"Error fetching token price: {e}")
-#         return 0.0
 
 def calculate_market_cap():
     """
