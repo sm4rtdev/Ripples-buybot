@@ -12,13 +12,16 @@ class TokenConfig:
     def __init__(self) -> None:
         self.config_file = 'config.json'
         self.config = {
-            "CHAT_ID": None,
+            "CHAT_IDS": [],  # Changed from single CHAT_ID to list of CHAT_IDS
             "TOKEN_ISSUER": os.getenv('TOKEN_ISSUER', 'r93hE5FNShDdUqazHzNvwsCxL9mSqwyiru'),
             "TOKEN_CURRENCY": os.getenv('TOKEN_CURRENCY', '52504C5300000000000000000000000000000000'),
-            "THRESHOLD": os.getenv('THRESHOLD', '0'),
-            "EMOJI_ICON": os.getenv('EMOJI', '🚀'),
-            "MEDIA": os.getenv('MEDIA_URL', 'https://example.com/buy.gif'),
-            "TYPE": True  # True for GIF, False for image
+            "GROUP_SETTINGS": {},  # New field to store per-group settings
+            "DEFAULT_SETTINGS": {
+                "THRESHOLD": os.getenv('THRESHOLD', '0'),
+                "EMOJI_ICON": os.getenv('EMOJI', '💥'),
+                "MEDIA": os.getenv('MEDIA_URL', 'https://example.com/buy.gif'),
+                "TYPE": True  # True for GIF, False for image
+            }
         }
         self.load_config()
 
@@ -38,13 +41,65 @@ class TokenConfig:
             self.save_config()
 
     def save_config(self):
-        """Save current configuration to file."""
+        """Save current configuration to file with a backup."""
         try:
+            if os.path.exists(self.config_file):
+                os.rename(self.config_file, f"{self.config_file}.backup")
             with open(self.config_file, 'w', encoding='utf-8') as file:
                 json.dump(self.config, file, indent=2, ensure_ascii=False)
             logger.info("Configuration saved successfully")
         except Exception as e:
             logger.error(f"Error saving configuration: {e}")
+
+    def add_group(self, chat_id):
+        """Add a new group to the configuration."""
+        try:
+            if chat_id not in self.config["CHAT_IDS"]:
+                self.config["CHAT_IDS"].append(chat_id)
+                self.config["GROUP_SETTINGS"][str(chat_id)] = self.config["DEFAULT_SETTINGS"].copy()
+                self.save_config()
+                logger.info(f"Added new group: {chat_id}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error adding group: {e}")
+            return False
+
+    def remove_group(self, chat_id):
+        """Remove a group from the configuration."""
+        try:
+            if chat_id in self.config["CHAT_IDS"]:
+                self.config["CHAT_IDS"].remove(chat_id)
+                self.config["GROUP_SETTINGS"].pop(str(chat_id), None)
+                self.save_config()
+                logger.info(f"Removed group: {chat_id}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error removing group: {e}")
+            return False
+
+    def get_group_settings(self, chat_id):
+        """Get settings for a specific group."""
+        return self.config["GROUP_SETTINGS"].get(str(chat_id), self.config["DEFAULT_SETTINGS"].copy())
+
+    def update_group_settings(self, chat_id, settings):
+        """Update settings for a specific group."""
+        try:
+            chat_id_str = str(chat_id)
+            if chat_id_str not in self.config["GROUP_SETTINGS"]:
+                self.config["GROUP_SETTINGS"][chat_id_str] = self.config["DEFAULT_SETTINGS"].copy()
+            self.config["GROUP_SETTINGS"][chat_id_str].update(settings)
+            self.save_config()
+            logger.info(f"Updated settings for group: {chat_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating group settings: {e}")
+            return False
+
+    def get_config(self):
+        """Get current configuration."""
+        return self.config
 
     def update_config(self, key, value):
         """Update a specific configuration value."""
@@ -54,73 +109,22 @@ class TokenConfig:
                 self.save_config()
                 logger.info(f"Updated {key} configuration")
                 return True
-            else:
-                logger.warning(f"Attempted to update invalid config key: {key}")
-                return False
+            return False
         except Exception as e:
             logger.error(f"Error updating configuration: {e}")
             return False
 
-    def get_config(self):
-        """Get current configuration."""
-        return self.config
-
-    def reset_config(self):
-        """Reset configuration to default values."""
-        try:
-            self.config = {
-                "CHAT_ID": None,
-                "TOKEN_ISSUER": os.getenv('TOKEN_ISSUER', 'r93hE5FNShDdUqazHzNvwsCxL9mSqwyiru'),
-                "TOKEN_CURRENCY": os.getenv('TOKEN_CURRENCY', '52504C5300000000000000000000000000000000'),
-                "THRESHOLD": os.getenv('THRESHOLD', '0'),
-                "EMOJI_ICON": os.getenv('EMOJI', '🚀'),
-                "MEDIA": os.getenv('MEDIA_URL', 'https://example.com/buy.gif'),
-                "TYPE": True
-            }
-            self.save_config()
-            logger.info("Configuration reset to defaults")
-            return True
-        except Exception as e:
-            logger.error(f"Error resetting configuration: {e}")
-            return False
-
-    def update_multiple(self, updates):
-        """Update multiple configuration values at once."""
-        try:
-            for key, value in updates.items():
-                if key in self.config:
-                    self.config[key] = value
-                else:
-                    logger.warning(f"Skipped invalid config key: {key}")
-            self.save_config()
-            logger.info("Updated multiple configuration values")
-            return True
-        except Exception as e:
-            logger.error(f"Error updating multiple configurations: {e}")
-            return False
-
     def validate_config(self):
         """Validate the current configuration."""
-        required_keys = ["TOKEN_ISSUER", "TOKEN_CURRENCY", "THRESHOLD"]
+        required_keys = ["TOKEN_ISSUER", "TOKEN_CURRENCY"]
         missing_keys = [key for key in required_keys if not self.config.get(key)]
         
         if missing_keys:
             logger.error(f"Missing required configuration keys: {missing_keys}")
             return False
         
-        # Validate TOKEN_ISSUER format (should start with 'r')
         if not self.config["TOKEN_ISSUER"].startswith('r'):
             logger.error("Invalid TOKEN_ISSUER format")
-            return False
-        
-        # Validate THRESHOLD is a positive number
-        try:
-            threshold = float(self.config["THRESHOLD"])
-            if threshold <= 0:
-                logger.error("THRESHOLD must be positive")
-                return False
-        except ValueError:
-            logger.error("THRESHOLD must be a valid number")
             return False
         
         return True
@@ -128,13 +132,11 @@ class TokenConfig:
     def get_formatted_config(self):
         """Get a formatted string representation of the configuration."""
         config = self.get_config()
+        groups_info = "\n".join([f"- Group {cid}: {self.get_group_settings(cid)}" 
+                               for cid in config['CHAT_IDS']])
         return (
             "Current Configuration:\n"
-            f"- Chat ID: {config['CHAT_ID'] or 'Not set'}\n"
             f"- Token Issuer: {config['TOKEN_ISSUER']}\n"
-            f"- Currency Code: {config['TOKEN_CURRENCY']}\n"
-            f"- Threshold: {config['THRESHOLD']} XRP\n"
-            f"- Emoji: {config['EMOJI_ICON']}\n"
-            f"- Media Type: {'GIF' if config['TYPE'] else 'Photo'}\n"
-            f"- Media URL: {config['MEDIA']}"
+            f"- Token Currency: {config['TOKEN_CURRENCY']}\n"
+            f"- Monitored Groups:\n{groups_info}"
         )
