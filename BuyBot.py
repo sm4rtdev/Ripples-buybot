@@ -413,74 +413,102 @@ async def set_emoji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"✅ Buy notification emoji updated to {emoji} for this group.")
 
-def get_circulating_supply(coin_id):
-    """
-    Fetch the circulating supply of a cryptocurrency from CoinGecko API.
-    :param coin_id: The CoinGecko ID of the cryptocurrency (e.g., "ripple" for XRP).
-    :return: Circulating supply as a float, or None if not found.
-    """
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-    max_retries = 5  # Maximum number of retries
-    retry_delay = 10  # Delay in seconds between retries
+# def get_circulating_supply(coin_id):
+#     """
+#     Fetch the circulating supply of a cryptocurrency from CoinGecko API.
+#     :param coin_id: The CoinGecko ID of the cryptocurrency (e.g., "ripple" for XRP).
+#     :return: Circulating supply as a float, or None if not found.
+#     """
+#     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+#     max_retries = 5  # Maximum number of retries
+#     retry_delay = 10  # Delay in seconds between retries
 
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(url)
+#     for attempt in range(max_retries):
+#         try:
+#             response = requests.get(url)
             
-            # Handle rate limit (429 Too Many Requests)
-            if response.status_code == 429:
-                print(f"Rate limit exceeded. Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                continue  # Retry the request
+#             # Handle rate limit (429 Too Many Requests)
+#             if response.status_code == 429:
+#                 print(f"Rate limit exceeded. Retrying in {retry_delay} seconds...")
+#                 time.sleep(retry_delay)
+#                 continue  # Retry the request
             
-            # Raise an error for other bad status codes
-            response.raise_for_status()
+#             # Raise an error for other bad status codes
+#             response.raise_for_status()
             
-            # Parse the response
-            data = response.json()
-            circulating_supply = data["market_data"]["circulating_supply"]
-            return circulating_supply
+#             # Parse the response
+#             data = response.json()
+#             circulating_supply = data["market_data"]["circulating_supply"]
+#             return circulating_supply
         
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching circulating supply (attempt {attempt + 1}): {e}")
-            if attempt < max_retries - 1:  # If retries are left
-                print(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-            else:
-                print("Max retries reached. Exiting.")
-                return None
+#         except requests.exceptions.RequestException as e:
+#             print(f"Error fetching circulating supply (attempt {attempt + 1}): {e}")
+#             if attempt < max_retries - 1:  # If retries are left
+#                 print(f"Retrying in {retry_delay} seconds...")
+#                 time.sleep(retry_delay)
+#             else:
+#                 print("Max retries reached. Exiting.")
+#                 return None
     
-def get_token_price(token_symbol):
-    """
-    Fetch the current token price in USD from CoinGecko.
-    """
-    try:
-        response = requests.get(
-            f"https://api.coingecko.com/api/v3/simple/price?ids={token_symbol}&vs_currencies=usd"
-        )
-        response.raise_for_status()
-        data = response.json()
+# def get_token_price(token_symbol):
+#     """
+#     Fetch the current token price in USD from CoinGecko.
+#     """
+#     try:
+#         response = requests.get(
+#             f"https://api.coingecko.com/api/v3/simple/price?ids={token_symbol}&vs_currencies=usd"
+#         )
+#         response.raise_for_status()
+#         data = response.json()
 
-        # Check if the token exists in the response
-        if token_symbol not in data:
-            raise ValueError(f"Token '{token_symbol}' not found in CoinGecko response.")
-        return data[token_symbol]["usd"]
-    except Exception as e:
-        logger.error(f"Error fetching token price: {e}")
-        return 0.0
+#         # Check if the token exists in the response
+#         if token_symbol not in data:
+#             raise ValueError(f"Token '{token_symbol}' not found in CoinGecko response.")
+#         return data[token_symbol]["usd"]
+#     except Exception as e:
+#         logger.error(f"Error fetching token price: {e}")
+#         return 0.0
 
 def calculate_market_cap():
     """
-    Calculate the market cap of the token.
+    Calculate the market cap of the token using the token activity API.
     """
+    url = "https://api.firstledger.net/api/token-activity"
+    payload = {
+        "issuer": "r93hE5FNShDdUqazHzNvwsCxL9mSqwyiru",
+        "currency": "52504C5300000000000000000000000000000000",
+        "user_xrp_address": ""
+    }
+
     try:
-        # Ensure the coroutine is awaited
-        token_symbol = "ripples"
-        market_cap = get_circulating_supply(token_symbol) * get_token_price(token_symbol)
-        return market_cap
+        # Fetch token activity data
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            data = response.json()
+
+            # Attempt to get market cap directly from the response
+            price_changes = data.get("Price_Changes", [])
+            if price_changes and "market_cap" in price_changes[0]:
+                market_cap = float(price_changes[0]["market_cap"])
+                return market_cap
+
+            # If market cap is not directly available, calculate it
+            circulating_supply = float(data.get("circulating_supply", 0))
+            price_per_token = float(data.get("price_usd", 0))
+
+            if circulating_supply and price_per_token:
+                market_cap = circulating_supply * price_per_token
+                return market_cap
+
+            logger.error("Missing circulating supply or price data in API response.")
+            return 0
+        else:
+            logger.error(f"Error fetching token activity: {response.status_code} - {response.text}")
+            return 0
     except Exception as e:
         logger.error(f"Error calculating market cap: {e}", exc_info=True)
         return 0
+
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):

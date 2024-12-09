@@ -17,7 +17,7 @@ class TokenConfig:
             "TOKEN_CURRENCY": os.getenv('TOKEN_CURRENCY', '52504C5300000000000000000000000000000000'),
             "GROUP_SETTINGS": {},  # New field to store per-group settings
             "DEFAULT_SETTINGS": {
-                "THRESHOLD": os.getenv('THRESHOLD', '0'),
+                "THRESHOLD": os.getenv('THRESHOLD', '100'),
                 "EMOJI_ICON": os.getenv('EMOJI', '💥'),
                 "MEDIA": os.getenv('MEDIA_URL', 'https://example.com/buy.gif'),
                 "TYPE": True  # True for GIF, False for image
